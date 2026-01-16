@@ -246,6 +246,248 @@ DELETE /api/stack/:id               # Excluir tecnologia
 - **React Hook Form** - Formulários
 - **Zod** - Validação de dados
 
+## 🏗️ Arquitetura do Frontend
+
+### Visão Geral da Arquitetura
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        APRESENTAÇÃO                              │
+├─────────────────────────────────────────────────────────────────┤
+│  Pages (Next.js App Router)                                     │
+│  ├── app/page.tsx (Pública)                                     │
+│  └── app/admin/* (Protegidas)                                   │
+│                                                                  │
+│  Components                                                      │
+│  ├── Públicos: Hero, Projects, Services, Tech-Stack, CTA        │
+│  ├── Admin: Sidebar, StatCard, RecentMessages                   │
+│  └── UI: Button, Card, Input, Dialog, Alert... (shadcn/ui)      │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                         LÓGICA DE NEGÓCIO                        │
+├─────────────────────────────────────────────────────────────────┤
+│  Services (Camada de Serviço)                                   │
+│  ├── auth.service.ts      → Autenticação e perfil              │
+│  ├── messages.service.ts  → Gerenciamento de mensagens          │
+│  ├── projects.service.ts  → CRUD de projetos                    │
+│  ├── services.service.ts  → CRUD de serviços                    │
+│  ├── stack.service.ts     → CRUD de tecnologias                 │
+│  └── settings.service.ts  → Configurações da empresa            │
+│                                                                  │
+│  Hooks Customizados                                             │
+│  ├── use-toast.ts         → Sistema de notificações            │
+│  └── use-mobile.ts        → Detecção de dispositivo            │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                      COMUNICAÇÃO HTTP                            │
+├─────────────────────────────────────────────────────────────────┤
+│  lib/api.ts (Cliente Axios)                                     │
+│  ├── Interceptor de Request  → Adiciona Bearer Token           │
+│  ├── Interceptor de Response → Trata erros 401 (logout)        │
+│  ├── getResponseData()       → Extrai data de ApiResponse       │
+│  └── handleApiError()        → Padroniza mensagens de erro     │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                        BACKEND API                               │
+├─────────────────────────────────────────────────────────────────┤
+│  NestJS Backend (http://localhost:3001)                         │
+│  ├── /api/auth/*          → Autenticação JWT                    │
+│  ├── /api/messages/*      → Mensagens de contato                │
+│  ├── /api/projects/*      → Projetos do portfólio               │
+│  ├── /api/services/*      → Serviços oferecidos                 │
+│  ├── /api/stack/*         → Stack tecnológica                   │
+│  └── /api/settings/*      → Configurações da empresa            │
+└─────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────┐
+│                       BANCO DE DADOS                             │
+├─────────────────────────────────────────────────────────────────┤
+│  MongoDB                                                         │
+│  ├── users         → Usuários administradores                   │
+│  ├── messages      → Mensagens de contato                       │
+│  ├── projects      → Projetos do portfólio                      │
+│  ├── services      → Serviços oferecidos                        │
+│  ├── technologies  → Stack tecnológica                          │
+│  └── settings      → Configurações (singleton)                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Fluxo de Dados
+
+#### 1. Autenticação (Login)
+```
+Usuario → Login Page → authService.login()
+                          ↓
+                     POST /api/auth/login
+                          ↓
+            Token salvo em localStorage
+                          ↓
+              router.push("/admin/dashboard")
+```
+
+#### 2. Requisição Autenticada
+```
+Página Admin → service.method()
+                    ↓
+              lib/api.ts (Axios)
+                    ↓
+    Interceptor adiciona: Authorization: Bearer {token}
+                    ↓
+            POST/GET/PUT/DELETE /api/*
+                    ↓
+              Backend valida JWT
+                    ↓
+        Response: { success: true, data: {...} }
+                    ↓
+              getResponseData(response)
+                    ↓
+          Componente atualiza UI
+```
+
+#### 3. Tratamento de Erro 401
+```
+API Response 401 Unauthorized
+          ↓
+   Interceptor detecta
+          ↓
+  localStorage.clear()
+          ↓
+router.push("/admin/login")
+```
+
+### Padrões Arquiteturais
+
+#### 1. **Separação de Responsabilidades**
+- **Components**: Apenas apresentação e interação do usuário
+- **Services**: Lógica de negócio e comunicação com API
+- **Lib/API**: Cliente HTTP centralizado com interceptors
+- **Types**: Definições de tipos TypeScript compartilhadas
+
+#### 2. **Service Layer Pattern**
+Todos os serviços seguem o mesmo padrão:
+```typescript
+class ServiceName {
+  async getAll(): Promise<Type[]> { /* ... */ }
+  async getById(id: string): Promise<Type> { /* ... */ }
+  async create(data: CreateDto): Promise<Type> { /* ... */ }
+  async update(id: string, data: UpdateDto): Promise<Type> { /* ... */ }
+  async delete(id: string): Promise<void> { /* ... */ }
+}
+```
+
+#### 3. **Estrutura de Response Padronizada**
+```typescript
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+```
+
+#### 4. **Client-Side vs Server-Side**
+- **Páginas Públicas**: Componentes Client ("use client") com dados mockados
+- **Páginas Admin**: Componentes Client com integração real à API
+- **Layout**: Verifica autenticação e protege rotas
+
+### Componentes Principais
+
+#### 1. **Layout Admin** (`app/admin/layout.tsx`)
+```typescript
+✓ Verifica token no localStorage (accessToken)
+✓ Redireciona para /admin/login se não autenticado
+✓ Renderiza AdminSidebar para páginas autenticadas
+✓ Mostra loading durante verificação
+```
+
+#### 2. **HTTP Client** (`lib/api.ts`)
+```typescript
+✓ Instância Axios configurada
+✓ baseURL: http://localhost:3001
+✓ timeout: 10000ms
+✓ Interceptors para auth e erro
+```
+
+#### 3. **Services** (`services/*.service.ts`)
+```typescript
+✓ Métodos tipados com TypeScript
+✓ Tratamento de erro padronizado
+✓ Reutilizáveis em qualquer componente
+✓ Exporta instância singleton
+```
+
+### Estado e Gerenciamento de Dados
+
+#### Local State (useState)
+- Formulários e inputs
+- Estados de UI (loading, error)
+- Dados temporários
+
+#### localStorage
+- `accessToken`: JWT token de autenticação
+- `user`: Dados do usuário logado (JSON)
+
+#### Server State
+- Dados vêm da API do backend
+- Cada página carrega seus dados via useEffect
+- Não há cache de dados (sempre busca atualizado)
+
+### Roteamento
+
+#### Next.js App Router
+```
+app/
+├── page.tsx                    → / (pública)
+├── admin/
+│   ├── layout.tsx             → Layout com proteção
+│   ├── login/page.tsx         → /admin/login
+│   ├── dashboard/page.tsx     → /admin/dashboard
+│   ├── mensagens/page.tsx     → /admin/mensagens
+│   ├── projetos/page.tsx      → /admin/projetos
+│   ├── servicos/page.tsx      → /admin/servicos
+│   ├── stack/page.tsx         → /admin/stack
+│   └── configuracoes/page.tsx → /admin/configuracoes
+```
+
+#### Proteção de Rotas
+- Layout admin verifica `localStorage.getItem("accessToken")`
+- Se não existir token → redirect para `/admin/login`
+- Página de login não passa pela verificação
+
+### Segurança
+
+#### Frontend
+✓ Validação de formulários com Zod
+✓ Sanitização de inputs
+✓ Token em localStorage (substituir por httpOnly cookies em produção)
+✓ Logout automático em 401
+
+#### Backend (esperado)
+✓ JWT com expiração (8 horas)
+✓ Bcrypt para senhas
+✓ Validação com class-validator
+✓ Guards do NestJS
+✓ Rate limiting
+
+### Responsividade
+
+#### Breakpoints (Tailwind CSS)
+```
+sm:  640px  → Tablet portrait
+md:  768px  → Tablet landscape
+lg:  1024px → Desktop
+xl:  1280px → Large desktop
+2xl: 1536px → Extra large
+```
+
+#### Componentes Adaptáveis
+- Sidebar colapsa em mobile (menu hambúrguer)
+- Grids se tornam stacks verticais
+- Cards ajustam padding e tamanho
+- Tabelas se transformam em cards em mobile
+
 ## 📦 Instalação
 
 ```bash
