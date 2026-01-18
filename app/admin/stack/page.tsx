@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -21,25 +21,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-
-interface Technology {
-  id: string
-  name: string
-  category: "frontend" | "backend" | "database" | "devops" | "design" | "mobile"
-  icon: string
-  level: "básico" | "intermediário" | "avançado"
-  createdAt: string
-}
-
-// Dados mockados
-const mockTechnologies: Technology[] = [
-  { id: "1", name: "React", category: "frontend", icon: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg", level: "avançado", createdAt: new Date().toISOString() },
-  { id: "2", name: "Next.js", category: "frontend", icon: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nextjs/nextjs-original.svg", level: "avançado", createdAt: new Date().toISOString() },
-  { id: "3", name: "TypeScript", category: "frontend", icon: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg", level: "avançado", createdAt: new Date().toISOString() },
-  { id: "4", name: "Node.js", category: "backend", icon: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg", level: "avançado", createdAt: new Date().toISOString() },
-  { id: "5", name: "PostgreSQL", category: "database", icon: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-original.svg", level: "avançado", createdAt: new Date().toISOString() },
-  { id: "6", name: "Docker", category: "devops", icon: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/docker/docker-original.svg", level: "intermediário", createdAt: new Date().toISOString() },
-]
+import { useToast } from "@/hooks/use-toast"
+import { Toaster } from "@/components/ui/toaster"
+import { stackService } from "@/services"
+import { Technology } from "@/types"
 
 const categoryLabels = {
   frontend: "Frontend",
@@ -63,11 +48,14 @@ const levelColors = {
 }
 
 export default function StackPage() {
-  const [technologies, setTechnologies] = useState<Technology[]>(mockTechnologies)
+  const { toast } = useToast()
+  const [technologies, setTechnologies] = useState<Technology[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTech, setEditingTech] = useState<Technology | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   
   const [formData, setFormData] = useState({
     name: "",
@@ -75,6 +63,27 @@ export default function StackPage() {
     icon: "",
     level: "intermediário" as Technology["level"],
   })
+
+  useEffect(() => {
+    loadTechnologies()
+  }, [])
+
+  const loadTechnologies = async () => {
+    try {
+      setLoading(true)
+      const data = await stackService.getTechnologies()
+      setTechnologies(data)
+    } catch (error) {
+      console.error("Erro ao carregar tecnologias:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar as tecnologias",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const filteredTechnologies = technologies.filter((tech) => {
     const matchesSearch = tech.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -103,28 +112,74 @@ export default function StackPage() {
     setIsDialogOpen(true)
   }
 
-  const handleSaveTechnology = () => {
-    const techData = {
-      id: editingTech?.id || Date.now().toString(),
-      name: formData.name,
-      category: formData.category,
-      icon: formData.icon,
-      level: formData.level,
-      createdAt: editingTech?.createdAt || new Date().toISOString(),
+  const handleSaveTechnology = async () => {
+    if (!formData.name || !formData.icon) {
+      toast({
+        title: "Erro",
+        description: "Preencha todos os campos obrigatórios",
+        variant: "destructive",
+      })
+      return
     }
 
-    if (editingTech) {
-      setTechnologies(technologies.map((t) => (t.id === editingTech.id ? techData : t)))
-    } else {
-      setTechnologies([techData, ...technologies])
-    }
+    try {
+      setSaving(true)
+      
+      const techData = {
+        name: formData.name,
+        category: formData.category,
+        icon: formData.icon,
+        level: formData.level,
+      }
 
-    setIsDialogOpen(false)
+      if (editingTech) {
+        const updated = await stackService.updateTechnology(editingTech._id, techData)
+        setTechnologies(technologies.map((t) => (t._id === editingTech._id ? updated : t)))
+        toast({
+          title: "Sucesso",
+          description: "Tecnologia atualizada com sucesso",
+        })
+      } else {
+        const created = await stackService.createTechnology(techData)
+        setTechnologies([created, ...technologies])
+        toast({
+          title: "Sucesso",
+          description: "Tecnologia criada com sucesso",
+        })
+      }
+
+      setIsDialogOpen(false)
+    } catch (error) {
+      console.error("Erro ao salvar tecnologia:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível salvar a tecnologia",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDeleteTechnology = (id: string) => {
-    if (confirm("Tem certeza que deseja excluir esta tecnologia?")) {
-      setTechnologies(technologies.filter((t) => t.id !== id))
+  const handleDeleteTechnology = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir esta tecnologia?")) {
+      return
+    }
+
+    try {
+      await stackService.deleteTechnology(id)
+      setTechnologies(technologies.filter((t) => t._id !== id))
+      toast({
+        title: "Sucesso",
+        description: "Tecnologia excluída com sucesso",
+      })
+    } catch (error) {
+      console.error("Erro ao excluir tecnologia:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível excluir a tecnologia",
+        variant: "destructive",
+      })
     }
   }
 
@@ -147,7 +202,7 @@ export default function StackPage() {
             Gerencie as tecnologias e ferramentas utilizadas
           </p>
         </div>
-        <Button onClick={() => handleOpenDialog()}>
+        <Button onClick={() => handleOpenDialog()} disabled={loading}>
           <Plus className="w-4 h-4 mr-2" />
           Nova Tecnologia
         </Button>
@@ -162,6 +217,7 @@ export default function StackPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
+            disabled={loading}
           />
         </div>
         <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -180,8 +236,15 @@ export default function StackPage() {
         </Select>
       </div>
 
-      {/* Technologies by Category */}
-      {filteredTechnologies.length === 0 ? (
+      {/* Loading State */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">Carregando tecnologias...</p>
+          </div>
+        </div>
+      ) : filteredTechnologies.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground">Nenhuma tecnologia encontrada</p>
@@ -196,7 +259,7 @@ export default function StackPage() {
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {techs.map((tech) => (
-                  <Card key={tech.id} className="group hover:shadow-md transition-shadow">
+                  <Card key={tech._id} className="group hover:shadow-md transition-shadow">
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between mb-4">
                         <div className="w-12 h-12 bg-accent rounded-lg flex items-center justify-center overflow-hidden">
@@ -231,7 +294,7 @@ export default function StackPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleDeleteTechnology(tech.id)}
+                          onClick={() => handleDeleteTechnology(tech._id)}
                           className="flex-1 text-red-600 hover:text-red-700"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -333,18 +396,19 @@ export default function StackPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={saving}>
               Cancelar
             </Button>
             <Button
               onClick={handleSaveTechnology}
-              disabled={!formData.name || !formData.icon}
+              disabled={saving || !formData.name || !formData.icon}
             >
-              {editingTech ? "Salvar Alterações" : "Adicionar Tecnologia"}
+              {saving ? "Salvando..." : editingTech ? "Salvar Alterações" : "Adicionar Tecnologia"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Toaster />
     </div>
   )
 }

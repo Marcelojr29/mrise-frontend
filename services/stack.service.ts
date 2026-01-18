@@ -9,6 +9,16 @@ import {
   Pagination 
 } from '@/types';
 
+// Helpers para normalização de IDs (backend retorna 'id', frontend usa '_id')
+const normalizeTechnology = (tech: any): Technology => ({
+  ...tech,
+  _id: tech.id || tech._id,
+  id: tech.id || tech._id,
+});
+
+const normalizeTechnologies = (techs: any[]): Technology[] => 
+  techs.map(normalizeTechnology);
+
 // Parâmetros de consulta para listar tecnologias
 interface GetTechnologiesParams {
   page?: number;
@@ -36,7 +46,7 @@ class StackService {
         technologyData
       );
 
-      return getResponseData(response);
+      return normalizeTechnology(getResponseData(response));
     } catch (error) {
       throw new Error(handleApiError(error));
     }
@@ -53,7 +63,7 @@ class StackService {
         params,
       });
 
-      return getResponseData(response).technologies;
+      return normalizeTechnologies(getResponseData(response).technologies);
     } catch (error) {
       throw new Error(handleApiError(error));
     }
@@ -68,7 +78,7 @@ class StackService {
     try {
       const response = await api.get<ApiResponse<Technology>>(`/api/stack/${id}`);
 
-      return getResponseData(response);
+      return normalizeTechnology(getResponseData(response));
     } catch (error) {
       throw new Error(handleApiError(error));
     }
@@ -87,7 +97,7 @@ class StackService {
         updateData
       );
 
-      return getResponseData(response);
+      return normalizeTechnology(getResponseData(response));
     } catch (error) {
       throw new Error(handleApiError(error));
     }

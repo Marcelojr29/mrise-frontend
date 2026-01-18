@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -13,58 +13,57 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Plus, Edit, Trash2, Search, Code, Sparkles } from "lucide-react"
 import { LucideIcon } from "lucide-react"
 import * as Icons from "lucide-react"
-
-interface Service {
-  id: string
-  title: string
-  description: string
-  icon: string
-  features: string[]
-  createdAt: string
-}
-
-// Dados mockados
-const mockServices: Service[] = [
-  {
-    id: "1",
-    title: "Desenvolvimento Web",
-    description: "Criação de sites e aplicações web modernas, responsivas e otimizadas para todos os dispositivos.",
-    icon: "Globe",
-    features: ["Sites institucionais", "E-commerce", "Landing pages", "Web apps"],
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    title: "Aplicativos Mobile",
-    description: "Desenvolvimento de aplicativos nativos e híbridos para iOS e Android com as melhores tecnologias.",
-    icon: "Smartphone",
-    features: ["Apps nativos", "Apps híbridos", "PWA", "App Store deployment"],
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "3",
-    title: "Cloud Computing",
-    description: "Migração e gerenciamento de infraestrutura em nuvem para escalabilidade e performance.",
-    icon: "Cloud",
-    features: ["AWS", "Azure", "Google Cloud", "DevOps"],
-    createdAt: new Date().toISOString(),
-  },
-]
+import { servicesService } from "@/services"
+import { Service } from "@/types"
+import { useToast } from "@/hooks/use-toast"
+import { Toaster } from "@/components/ui/toaster"
 
 export default function ServicosPage() {
-  const [services, setServices] = useState<Service[]>(mockServices)
+  const [services, setServices] = useState<Service[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingService, setEditingService] = useState<Service | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const { toast } = useToast()
+
+  useEffect(() => {
+    loadServices()
+  }, [])
+
+  const loadServices = async () => {
+    try {
+      setLoading(true)
+      const data = await servicesService.getServices()
+      setServices(data)
+    } catch (error) {
+      console.error("Erro ao carregar serviços:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os serviços",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
   
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     icon: "Code",
     features: "",
+    category: "development",
   })
 
   const filteredServices = services.filter((service) =>
@@ -80,6 +79,7 @@ export default function ServicosPage() {
         description: service.description,
         icon: service.icon,
         features: service.features.join(", "),
+        category: service.category || "development",
       })
     } else {
       setEditingService(null)
@@ -88,33 +88,81 @@ export default function ServicosPage() {
         description: "",
         icon: "Code",
         features: "",
+        category: "development",
       })
     }
     setIsDialogOpen(true)
   }
 
-  const handleSaveService = () => {
-    const serviceData = {
-      id: editingService?.id || Date.now().toString(),
-      title: formData.title,
-      description: formData.description,
-      icon: formData.icon,
-      features: formData.features.split(",").map((f) => f.trim()).filter(Boolean),
-      createdAt: editingService?.createdAt || new Date().toISOString(),
+  const handleSaveService = async () => {
+    if (!formData.title || !formData.description || !formData.category) {
+      toast({
+        title: "Erro",
+        description: "Preencha todos os campos obrigatórios",
+        variant: "destructive",
+      })
+      return
     }
 
-    if (editingService) {
-      setServices(services.map((s) => (s.id === editingService.id ? serviceData : s)))
-    } else {
-      setServices([serviceData, ...services])
-    }
+    try {
+      setSaving(true)
+      
+      const serviceData = {
+        title: formData.title,
+        description: formData.description,
+        icon: formData.icon,
+        features: formData.features.split(",").map((f) => f.trim()).filter(Boolean),
+        category: formData.category,
+      }
 
-    setIsDialogOpen(false)
+      if (editingService) {
+        const updated = await servicesService.updateService(editingService._id, serviceData)
+        setServices(services.map((s) => (s._id === editingService._id ? updated : s)))
+        toast({
+          title: "Sucesso",
+          description: "Serviço atualizado com sucesso",
+        })
+      } else {
+        const created = await servicesService.createService(serviceData)
+        setServices([created, ...services])
+        toast({
+          title: "Sucesso",
+          description: "Serviço criado com sucesso",
+        })
+      }
+
+      setIsDialogOpen(false)
+    } catch (error: any) {
+      console.error("Erro ao salvar serviço:", error)
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível salvar o serviço",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDeleteService = (id: string) => {
-    if (confirm("Tem certeza que deseja excluir este serviço?")) {
-      setServices(services.filter((s) => s.id !== id))
+  const handleDeleteService = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este serviço?")) {
+      return
+    }
+
+    try {
+      await servicesService.deleteService(id)
+      setServices(services.filter((s) => s._id !== id))
+      toast({
+        title: "Sucesso",
+        description: "Serviço excluído com sucesso",
+      })
+    } catch (error) {
+      console.error("Erro ao excluir serviço:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível excluir o serviço",
+        variant: "destructive",
+      })
     }
   }
 
@@ -132,7 +180,7 @@ export default function ServicosPage() {
             Adicione, edite ou remova os serviços oferecidos pela empresa
           </p>
         </div>
-        <Button onClick={() => handleOpenDialog()}>
+        <Button onClick={() => handleOpenDialog()} disabled={loading}>
           <Plus className="w-4 h-4 mr-2" />
           Novo Serviço
         </Button>
@@ -146,11 +194,19 @@ export default function ServicosPage() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="pl-10"
+          disabled={loading}
         />
       </div>
 
-      {/* Services Grid */}
-      {filteredServices.length === 0 ? (
+      {/* Loading State */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">Carregando serviços...</p>
+          </div>
+        </div>
+      ) : filteredServices.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground">Nenhum serviço encontrado</p>
@@ -162,7 +218,7 @@ export default function ServicosPage() {
             const IconComponent = getIcon(service.icon)
             
             return (
-              <Card key={service.id} className="group hover:shadow-lg transition-shadow">
+              <Card key={service._id} className="group hover:shadow-lg transition-shadow">
                 <CardContent className="p-6 space-y-4">
                   <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                     <IconComponent className="w-6 h-6 text-primary" />
@@ -204,7 +260,7 @@ export default function ServicosPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleDeleteService(service.id)}
+                      onClick={() => handleDeleteService(service._id)}
                       className="flex-1 text-red-600 hover:text-red-700"
                     >
                       <Trash2 className="w-4 h-4 mr-2" />
@@ -253,6 +309,26 @@ export default function ServicosPage() {
             </div>
 
             <div className="space-y-2">
+              <label className="text-sm font-medium">Categoria *</label>
+              <Select
+                value={formData.category}
+                onValueChange={(value) => setFormData({ ...formData, category: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="development">Desenvolvimento</SelectItem>
+                  <SelectItem value="design">Design</SelectItem>
+                  <SelectItem value="mobile">Mobile</SelectItem>
+                  <SelectItem value="consulting">Consultoria</SelectItem>
+                  <SelectItem value="infrastructure">Infraestrutura</SelectItem>
+                  <SelectItem value="other">Outro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
               <label className="text-sm font-medium">
                 Ícone * (nome do Lucide Icon, ex: Code, Globe, Smartphone)
               </label>
@@ -288,18 +364,19 @@ export default function ServicosPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={saving}>
               Cancelar
             </Button>
             <Button
               onClick={handleSaveService}
-              disabled={!formData.title || !formData.description || !formData.icon}
+              disabled={saving || !formData.title || !formData.description || !formData.icon || !formData.category}
             >
-              {editingService ? "Salvar Alterações" : "Criar Serviço"}
+              {saving ? "Salvando..." : editingService ? "Salvar Alterações" : "Criar Serviço"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Toaster />
     </div>
   )
 }

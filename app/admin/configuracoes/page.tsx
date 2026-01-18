@@ -66,7 +66,9 @@ export default function ConfiguracoesPage() {
     try {
       setSaving(true)
       setError("")
-      await settingsService.updateCompanyInfo(companyInfo)
+      // Remover _id antes de enviar
+      const { _id, ...companyData } = companyInfo as any
+      await settingsService.updateCompanyInfo(companyData)
       toast({
         title: "Informações atualizadas",
         description: "As informações da empresa foram salvas com sucesso.",
@@ -88,7 +90,9 @@ export default function ConfiguracoesPage() {
     try {
       setSaving(true)
       setError("")
-      await settingsService.updateSocialLinks(socialLinks)
+      // Remover _id antes de enviar
+      const { _id, ...socialData } = socialLinks as any
+      await settingsService.updateSocialLinks(socialData)
       toast({
         title: "Links atualizados",
         description: "Os links das redes sociais foram salvos com sucesso.",

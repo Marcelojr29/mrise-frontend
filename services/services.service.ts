@@ -7,6 +7,19 @@ import {
   Pagination 
 } from '@/types';
 
+// Helper para normalizar IDs (backend retorna 'id', frontend usa '_id')
+const normalizeService = (service: any): Service => {
+  return {
+    ...service,
+    _id: service._id || service.id,
+    id: service.id || service._id,
+  };
+};
+
+const normalizeServices = (services: any[]): Service[] => {
+  return services.map(normalizeService);
+};
+
 // Parâmetros de consulta para listar serviços
 interface GetServicesParams {
   page?: number;
@@ -33,7 +46,7 @@ class ServicesService {
         serviceData
       );
 
-      return getResponseData(response);
+      return normalizeService(getResponseData(response));
     } catch (error) {
       throw new Error(handleApiError(error));
     }
@@ -50,7 +63,7 @@ class ServicesService {
         params,
       });
 
-      return getResponseData(response).services;
+      return normalizeServices(getResponseData(response).services);
     } catch (error) {
       throw new Error(handleApiError(error));
     }
@@ -65,7 +78,7 @@ class ServicesService {
     try {
       const response = await api.get<ApiResponse<Service>>(`/api/services/${id}`);
 
-      return getResponseData(response);
+      return normalizeService(getResponseData(response));
     } catch (error) {
       throw new Error(handleApiError(error));
     }
@@ -84,7 +97,7 @@ class ServicesService {
         updateData
       );
 
-      return getResponseData(response);
+      return normalizeService(getResponseData(response));
     } catch (error) {
       throw new Error(handleApiError(error));
     }

@@ -98,9 +98,11 @@ export default function MensagensPage() {
     // Marcar como lida se for nova
     if (message.status === "nova") {
       try {
-        await messagesService.markAsRead(message._id)
-        setMessages(
-          messages.map((m) =>
+        const updatedMessage = await messagesService.markAsRead(message._id)
+        
+        // Atualizar apenas a mensagem específica
+        setMessages(prevMessages => 
+          prevMessages.map((m) =>
             m._id === message._id ? { ...m, status: "lida" } : m
           )
         )
@@ -112,9 +114,11 @@ export default function MensagensPage() {
 
   const handleMarkAsResponded = async (id: string) => {
     try {
-      await messagesService.markAsResponded(id)
-      setMessages(
-        messages.map((m) =>
+      const updatedMessage = await messagesService.markAsResponded(id)
+      
+      // Atualizar apenas a mensagem específica
+      setMessages(prevMessages =>
+        prevMessages.map((m) =>
           m._id === id ? { ...m, status: "respondida" } : m
         )
       )

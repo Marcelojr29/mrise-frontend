@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -15,49 +15,40 @@ import {
 } from "@/components/ui/dialog"
 import { Plus, Edit, Trash2, Search, ExternalLink } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-
-interface Project {
-  id: string
-  title: string
-  description: string
-  image: string
-  technologies: string[]
-  liveUrl?: string
-  githubUrl?: string
-  featured: boolean
-  createdAt: string
-}
-
-// Dados mockados
-const mockProjects: Project[] = [
-  {
-    id: "1",
-    title: "E-commerce Platform",
-    description: "Plataforma completa de e-commerce com painel administrativo, gestão de produtos e integração de pagamentos.",
-    image: "https://images.unsplash.com/photo-1557821552-17105176677c?w=800&h=600&fit=crop",
-    technologies: ["Next.js", "TypeScript", "Stripe", "PostgreSQL"],
-    liveUrl: "https://example.com",
-    githubUrl: "https://github.com/example/repo",
-    featured: true,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: "2",
-    title: "Dashboard Analytics",
-    description: "Dashboard interativo para análise de dados com gráficos em tempo real e relatórios personalizados.",
-    image: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=800&h=600&fit=crop",
-    technologies: ["React", "D3.js", "Node.js", "MongoDB"],
-    liveUrl: "https://example.com",
-    featured: false,
-    createdAt: new Date().toISOString(),
-  },
-]
+import { projectsService } from "@/services"
+import { Project } from "@/types"
+import { useToast } from "@/hooks/use-toast"
+import { Toaster } from "@/components/ui/toaster"
 
 export default function ProjetosPage() {
-  const [projects, setProjects] = useState<Project[]>(mockProjects)
+  const [projects, setProjects] = useState<Project[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [searchTerm, setSearchTerm] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const { toast } = useToast()
+
+  useEffect(() => {
+    loadProjects()
+  }, [])
+
+  const loadProjects = async () => {
+    try {
+      setLoading(true)
+      const data = await projectsService.getProjects()
+      setProjects(data)
+    } catch (error) {
+      console.error("Erro ao carregar projetos:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os projetos",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
   
   const [formData, setFormData] = useState({
     title: "",
@@ -104,31 +95,77 @@ export default function ProjetosPage() {
     setIsDialogOpen(true)
   }
 
-  const handleSaveProject = () => {
-    const projectData = {
-      id: editingProject?.id || Date.now().toString(),
-      title: formData.title,
-      description: formData.description,
-      image: formData.image,
-      technologies: formData.technologies.split(",").map((t) => t.trim()),
-      liveUrl: formData.liveUrl,
-      githubUrl: formData.githubUrl,
-      featured: formData.featured,
-      createdAt: editingProject?.createdAt || new Date().toISOString(),
+  const handleSaveProject = async () => {
+    if (!formData.title || !formData.description || !formData.technologies) {
+      toast({
+        title: "Erro",
+        description: "Preencha todos os campos obrigatórios",
+        variant: "destructive",
+      })
+      return
     }
 
-    if (editingProject) {
-      setProjects(projects.map((p) => (p.id === editingProject.id ? projectData : p)))
-    } else {
-      setProjects([projectData, ...projects])
-    }
+    try {
+      setSaving(true)
+      
+      const projectData = {
+        title: formData.title,
+        description: formData.description,
+        image: formData.image,
+        technologies: formData.technologies.split(",").map((t) => t.trim()),
+        liveUrl: formData.liveUrl || undefined,
+        githubUrl: formData.githubUrl || undefined,
+        featured: formData.featured,
+      }
 
-    setIsDialogOpen(false)
+      if (editingProject) {
+        const updated = await projectsService.updateProject(editingProject._id, projectData)
+        setProjects(projects.map((p) => (p._id === editingProject._id ? updated : p)))
+        toast({
+          title: "Sucesso",
+          description: "Projeto atualizado com sucesso",
+        })
+      } else {
+        const created = await projectsService.createProject(projectData)
+        setProjects([created, ...projects])
+        toast({
+          title: "Sucesso",
+          description: "Projeto criado com sucesso",
+        })
+      }
+
+      setIsDialogOpen(false)
+    } catch (error: any) {
+      console.error("Erro ao salvar projeto:", error)
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível salvar o projeto",
+        variant: "destructive",
+      })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const handleDeleteProject = (id: string) => {
-    if (confirm("Tem certeza que deseja excluir este projeto?")) {
-      setProjects(projects.filter((p) => p.id !== id))
+  const handleDeleteProject = async (id: string) => {
+    if (!confirm("Tem certeza que deseja excluir este projeto?")) {
+      return
+    }
+
+    try {
+      await projectsService.deleteProject(id)
+      setProjects(projects.filter((p) => p._id !== id))
+      toast({
+        title: "Sucesso",
+        description: "Projeto excluído com sucesso",
+      })
+    } catch (error) {
+      console.error("Erro ao excluir projeto:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível excluir o projeto",
+        variant: "destructive",
+      })
     }
   }
 
@@ -142,7 +179,7 @@ export default function ProjetosPage() {
             Adicione, edite ou remova projetos do portfólio
           </p>
         </div>
-        <Button onClick={() => handleOpenDialog()}>
+        <Button onClick={() => handleOpenDialog()} disabled={loading}>
           <Plus className="w-4 h-4 mr-2" />
           Novo Projeto
         </Button>
@@ -156,11 +193,19 @@ export default function ProjetosPage() {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="pl-10"
+          disabled={loading}
         />
       </div>
 
-      {/* Projects Grid */}
-      {filteredProjects.length === 0 ? (
+      {/* Loading State */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
+            <p className="text-muted-foreground">Carregando projetos...</p>
+          </div>
+        </div>
+      ) : filteredProjects.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground">Nenhum projeto encontrado</p>
@@ -169,7 +214,7 @@ export default function ProjetosPage() {
       ) : (
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {filteredProjects.map((project) => (
-            <Card key={project.id} className="overflow-hidden group">
+            <Card key={project._id} className="overflow-hidden group">
               <div className="aspect-video overflow-hidden bg-accent">
                 <img
                   src={project.image}
@@ -232,7 +277,7 @@ export default function ProjetosPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handleDeleteProject(project.id)}
+                    onClick={() => handleDeleteProject(project._id)}
                     className="flex-1 text-red-600 hover:text-red-700"
                   >
                     <Trash2 className="w-4 h-4 mr-2" />
@@ -330,18 +375,20 @@ export default function ProjetosPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={saving}>
               Cancelar
             </Button>
             <Button
               onClick={handleSaveProject}
-              disabled={!formData.title || !formData.description || !formData.image || !formData.technologies}
+              disabled={!formData.title || !formData.description || !formData.image || !formData.technologies || saving}
             >
-              {editingProject ? "Salvar Alterações" : "Criar Projeto"}
+              {saving ? "Salvando..." : editingProject ? "Salvar Alterações" : "Criar Projeto"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Toaster />
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import api, { ApiResponse, getResponseData, handleApiError } from '@/lib/api';
+import axios from 'axios';
 import { 
   Message, 
   MessageList, 
@@ -7,6 +8,19 @@ import {
   UpdateMessageData,
   Pagination 
 } from '@/types';
+
+// Helper para normalizar IDs (backend retorna 'id', frontend usa '_id')
+const normalizeMessage = (message: any): Message => {
+  return {
+    ...message,
+    _id: message._id || message.id,
+    id: message.id || message._id,
+  };
+};
+
+const normalizeMessages = (messages: any[]): Message[] => {
+  return messages.map(normalizeMessage);
+};
 
 // Parâmetros de consulta para listar mensagens
 interface GetMessagesParams {
@@ -51,7 +65,7 @@ class MessagesService {
       });
 
       const data = getResponseData(response);
-      return data.messages;
+      return normalizeMessages(data.messages);
     } catch (error) {
       throw new Error(handleApiError(error));
     }
@@ -66,7 +80,7 @@ class MessagesService {
     try {
       const response = await api.get<ApiResponse<Message>>(`/api/messages/${id}`);
 
-      return getResponseData(response);
+      return normalizeMessage(getResponseData(response));
     } catch (error) {
       throw new Error(handleApiError(error));
     }
@@ -85,7 +99,7 @@ class MessagesService {
         updateData
       );
 
-      return getResponseData(response);
+      return normalizeMessage(getResponseData(response));
     } catch (error) {
       throw new Error(handleApiError(error));
     }

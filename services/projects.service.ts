@@ -7,6 +7,19 @@ import {
   Pagination 
 } from '@/types';
 
+// Helper para normalizar IDs (backend retorna 'id', frontend usa '_id')
+const normalizeProject = (project: any): Project => {
+  return {
+    ...project,
+    _id: project._id || project.id,
+    id: project.id || project._id,
+  };
+};
+
+const normalizeProjects = (projects: any[]): Project[] => {
+  return projects.map(normalizeProject);
+};
+
 // Parâmetros de consulta para listar projetos
 interface GetProjectsParams {
   page?: number;
@@ -34,7 +47,7 @@ class ProjectsService {
         projectData
       );
 
-      return getResponseData(response);
+      return normalizeProject(getResponseData(response));
     } catch (error) {
       throw new Error(handleApiError(error));
     }
@@ -51,7 +64,7 @@ class ProjectsService {
         params,
       });
 
-      return getResponseData(response).projects;
+      return normalizeProjects(getResponseData(response).projects);
     } catch (error) {
       throw new Error(handleApiError(error));
     }
@@ -66,7 +79,7 @@ class ProjectsService {
     try {
       const response = await api.get<ApiResponse<Project>>(`/api/projects/${id}`);
 
-      return getResponseData(response);
+      return normalizeProject(getResponseData(response));
     } catch (error) {
       throw new Error(handleApiError(error));
     }
@@ -85,7 +98,7 @@ class ProjectsService {
         updateData
       );
 
-      return getResponseData(response);
+      return normalizeProject(getResponseData(response));
     } catch (error) {
       throw new Error(handleApiError(error));
     }
