@@ -144,7 +144,7 @@ export function CTA() {
                     </div>
                     <div>
                       <h4 className="font-semibold mb-1">E-mail</h4>
-                      <p className="text-muted-foreground">contato@mrisetech.com</p>
+                      <p className="text-muted-foreground">marcelobjr.ti@gmail.com</p>
                     </div>
                   </div>
                 </CardContent>
